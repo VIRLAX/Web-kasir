@@ -13,113 +13,133 @@ interface BarcodeScannerProps {
 
 export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const scannedRef = useRef(false);
-  const cancelledRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const stopCamera = useCallback(() => {
+  const cleanup = useCallback(() => {
     try { readerRef.current?.reset(); } catch (_) {}
     readerRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
   }, []);
 
-  const startCamera = useCallback(async () => {
-    if (!videoRef.current) return;
-    cancelledRef.current = false;
+  const startScanner = useCallback(async () => {
+    if (!videoRef.current || !mountedRef.current) return;
     scannedRef.current = false;
-    setError(null);
-    setLoading(true);
+    setStatus("loading");
+    setErrorMsg("");
 
     try {
-      // Request rear camera on mobile
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
-      if (cancelledRef.current) {
-        stream.getTracks().forEach(t => t.stop());
-        return;
-      }
-
-      streamRef.current = stream;
-      const video = videoRef.current;
-      video.srcObject = stream;
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("muted", "true");
-      video.muted = true;
-
-      await new Promise<void>((resolve, reject) => {
-        video.onloadedmetadata = () => resolve();
-        video.onerror = reject;
-        setTimeout(resolve, 3000); // fallback timeout
-      });
-
-      await video.play();
-      setLoading(false);
-
-      // Start ZXing decode loop
       const reader = new BrowserMultiFormatReader();
       readerRef.current = reader;
 
-      reader.decodeFromStream(stream, video, (result, err) => {
-        if (result && !scannedRef.current && !cancelledRef.current) {
-          scannedRef.current = true;
-          const code = result.getText();
-          stopCamera();
-          onScan(code);
-          onClose();
+      // Listen for video playing event — most reliable "ready" signal on Android
+      const video = videoRef.current;
+      const onPlaying = () => {
+        if (mountedRef.current) setStatus("ready");
+      };
+      video.addEventListener("playing", onPlaying, { once: true });
+      // Fallback: force ready after 4s even if playing event doesn't fire
+      const readyTimer = setTimeout(() => {
+        if (mountedRef.current) setStatus("ready");
+      }, 4000);
+
+      // Let ZXing handle getUserMedia — use decodeFromConstraints for better mobile compat
+      await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
+        video,
+        (result, err, controls) => {
+          if (!mountedRef.current) {
+            controls?.stop();
+            return;
+          }
+          if (result && !scannedRef.current) {
+            scannedRef.current = true;
+            controls?.stop();
+            clearTimeout(readyTimer);
+            const code = result.getText();
+            onScan(code);
+            onClose();
+          }
+          // Suppress expected NotFoundException spam (no barcode in frame)
+          void err;
         }
-        // Suppress NotFoundException spam (expected when no barcode in frame)
-        if (err) {
-          const msg = err.message ?? "";
-          if (!msg.includes("No MultiFormat") && !msg.includes("NotFoundException") && !msg.includes("No barcode")) {
-            console.warn("Scanner error:", err);
+      );
+
+      clearTimeout(readyTimer);
+      // decodeFromConstraints resolves when video stream is set up
+      if (mountedRef.current) setStatus("ready");
+    } catch (err: unknown) {
+      if (!mountedRef.current) return;
+      cleanup();
+      const msg = String(err);
+      if (msg.includes("NotAllowed") || msg.includes("Permission") || msg.includes("denied")) {
+        setErrorMsg("Izin kamera ditolak.\n\nBuka Pengaturan browser lalu izinkan akses Kamera untuk situs ini, kemudian coba lagi.");
+      } else if (msg.includes("NotFound") || msg.includes("NotReadable")) {
+        setErrorMsg("Kamera tidak dapat diakses. Pastikan kamera tidak dipakai aplikasi lain.");
+      } else if (msg.includes("OverconstrainedError")) {
+        // Retry without facingMode constraint
+        retryWithAnyCamera();
+        return;
+      } else {
+        setErrorMsg(`Gagal membuka kamera.\n\n${msg}`);
+      }
+      setStatus("error");
+    }
+  }, [onScan, onClose, cleanup]);
+
+  const retryWithAnyCamera = useCallback(async () => {
+    if (!videoRef.current || !mountedRef.current) return;
+    try {
+      const reader = new BrowserMultiFormatReader();
+      readerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: true },
+        videoRef.current,
+        (result, _err, controls) => {
+          if (!mountedRef.current) { controls?.stop(); return; }
+          if (result && !scannedRef.current) {
+            scannedRef.current = true;
+            controls?.stop();
+            onScan(result.getText());
+            onClose();
           }
         }
-      });
-    } catch (err: unknown) {
-      setLoading(false);
-      const msg = (err as Error)?.message ?? "";
-      if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("denied")) {
-        setError("Izin kamera ditolak.\n\nBuka Pengaturan browser → izinkan akses Kamera untuk situs ini, lalu coba lagi.");
-      } else if (msg.includes("NotFound") || msg.includes("Devices")) {
-        setError("Kamera tidak ditemukan. Pastikan perangkat memiliki kamera.");
-      } else {
-        setError("Tidak dapat membuka kamera. Coba muat ulang halaman.");
-      }
+      );
+      if (mountedRef.current) setStatus("ready");
+    } catch (err) {
+      if (!mountedRef.current) return;
+      cleanup();
+      setErrorMsg("Tidak dapat membuka kamera apa pun di perangkat ini.");
+      setStatus("error");
     }
-  }, [onScan, onClose, stopCamera]);
+  }, [onScan, onClose, cleanup]);
 
   useEffect(() => {
+    mountedRef.current = open;
     if (open) {
-      startCamera();
+      startScanner();
     } else {
-      cancelledRef.current = true;
-      stopCamera();
+      cleanup();
+      setStatus("loading");
     }
     return () => {
-      cancelledRef.current = true;
-      stopCamera();
+      mountedRef.current = false;
+      cleanup();
     };
   }, [open]);
 
   const handleClose = useCallback(() => {
-    cancelledRef.current = true;
-    stopCamera();
+    cleanup();
     onClose();
-  }, [onClose, stopCamera]);
+  }, [cleanup, onClose]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -130,66 +150,61 @@ export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }
             <Camera className="w-4 h-4 text-primary" />
             <span className="font-semibold text-sm">{title}</span>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1"
-          >
+          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Camera area */}
+        {/* Camera viewport */}
         <div className="relative bg-black w-full" style={{ aspectRatio: "4/3" }}>
+          {/* Video always rendered so ref is available */}
           <video
             ref={videoRef}
             className="w-full h-full object-cover"
             playsInline
             muted
             autoPlay
+            style={{ display: status === "error" ? "none" : "block" }}
           />
 
-          {/* Scan frame overlay */}
-          {!error && !loading && (
+          {/* Scan frame — shown when ready */}
+          {status === "ready" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative w-56 h-40">
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] border-primary rounded-tl" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] border-primary rounded-tr" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[3px] border-l-[3px] border-primary rounded-bl" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[3px] border-r-[3px] border-primary rounded-br" />
-                {/* Animated scan line */}
+              <div className="relative w-56 h-44">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] border-primary" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] border-primary" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[3px] border-l-[3px] border-primary" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[3px] border-r-[3px] border-primary" />
                 <div
-                  className="absolute left-2 right-2 h-0.5 bg-primary/80"
-                  style={{ animation: "scanline 2s ease-in-out infinite", top: "50%" }}
+                  className="absolute left-1 right-1 h-0.5 bg-primary/80 rounded"
+                  style={{ animation: "scan 2s ease-in-out infinite" }}
                 />
               </div>
               <style>{`
-                @keyframes scanline {
-                  0%, 100% { transform: translateY(-60px); opacity: 0.4; }
-                  50% { transform: translateY(60px); opacity: 1; }
+                @keyframes scan {
+                  0%   { top: 8px;  opacity: 0.5; }
+                  50%  { top: calc(100% - 8px); opacity: 1; }
+                  100% { top: 8px;  opacity: 0.5; }
                 }
               `}</style>
             </div>
           )}
 
-          {/* Loading spinner */}
-          {loading && !error && (
+          {/* Loading overlay */}
+          {status === "loading" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
-              <Loader2 className="w-9 h-9 text-primary animate-spin" />
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
               <p className="text-sm text-white">Membuka kamera...</p>
+              <p className="text-xs text-white/50 px-6 text-center">Izinkan akses kamera jika ada permintaan</p>
             </div>
           )}
 
-          {/* Error state */}
-          {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center bg-black/90">
+          {/* Error overlay */}
+          {status === "error" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center bg-zinc-950">
               <AlertCircle className="w-12 h-12 text-destructive flex-shrink-0" />
-              <p className="text-sm text-white leading-relaxed whitespace-pre-line">{error}</p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={startCamera}
-                className="gap-2 mt-1"
-              >
+              <p className="text-sm text-white leading-relaxed whitespace-pre-line">{errorMsg}</p>
+              <Button size="sm" variant="outline" onClick={startScanner} className="gap-2">
                 <RefreshCw className="w-4 h-4" /> Coba Lagi
               </Button>
             </div>
@@ -199,7 +214,7 @@ export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }
         {/* Footer */}
         <div className="px-4 py-3 bg-card border-t border-border">
           <p className="text-xs text-muted-foreground text-center mb-3">
-            Arahkan kamera belakang ke barcode produk
+            {status === "ready" ? "Arahkan kamera ke barcode produk" : "Menunggu kamera..."}
           </p>
           <Button variant="outline" className="w-full" onClick={handleClose}>
             Batal
