@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { Plus, Search, Edit2, Trash2, Star, Package, Camera } from "lucide-react";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { Plus, Search, Edit2, Trash2, Star, Package, Camera, ImagePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -29,6 +29,29 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
+// Compress image to base64 with max size
+function compressImage(file: File, maxSize = 400): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function StockBadge({ stock, threshold }: { stock: number; threshold: number }) {
   if (stock === 0) return <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-[10px]">Habis</Badge>;
   if (stock <= threshold) return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px]">Menipis</Badge>;
@@ -45,8 +68,15 @@ export default function Produk() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string>("");
 
-  const form = useForm<FormData>({ resolver: zodResolver(schema), defaultValues: { name: "", barcode: "", price: 0, stock: 0, category: "Makanan", stockThreshold: 10, imageUrl: "", isFavorite: false } });
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", barcode: "", price: 0, stock: 0, category: "Makanan", stockThreshold: 10, imageUrl: "", isFavorite: false },
+  });
 
   const filtered = useMemo(() => {
     let list = products;
@@ -64,14 +94,38 @@ export default function Produk() {
 
   const openAdd = useCallback(() => {
     setEditingProduct(null);
+    setImagePreview("");
     form.reset({ name: "", barcode: generateBarcode(), price: 0, stock: 0, category: "Makanan", stockThreshold: 10, imageUrl: "", isFavorite: false });
     setDialogOpen(true);
   }, [form]);
 
   const openEdit = useCallback((p: Product) => {
     setEditingProduct(p);
+    setImagePreview(p.imageUrl ?? "");
     form.reset({ name: p.name, barcode: p.barcode, price: p.price, stock: p.stock, category: p.category, stockThreshold: p.stockThreshold, imageUrl: p.imageUrl ?? "", isFavorite: p.isFavorite });
     setDialogOpen(true);
+  }, [form]);
+
+  const handleImageFile = useCallback(async (file: File | null | undefined) => {
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, 400);
+      setImagePreview(compressed);
+      form.setValue("imageUrl", compressed);
+      toast({ title: "Foto berhasil ditambahkan" });
+    } catch {
+      toast({ title: "Gagal memproses foto", variant: "destructive" });
+    }
+  }, [form, toast]);
+
+  const handleCameraInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleImageFile(e.target.files?.[0]);
+    e.target.value = "";
+  }, [handleImageFile]);
+
+  const clearImage = useCallback(() => {
+    setImagePreview("");
+    form.setValue("imageUrl", "");
   }, [form]);
 
   const onSubmit = useCallback((data: FormData) => {
@@ -100,7 +154,6 @@ export default function Produk() {
     setProductsState(updated);
   }, [products]);
 
-  // Called when camera scanner returns a barcode in the add/edit form
   const handleBarcodeScan = useCallback((barcode: string) => {
     form.setValue("barcode", barcode, { shouldValidate: true });
     setScannerOpen(false);
@@ -171,6 +224,14 @@ export default function Produk() {
                   <tr key={p.id} data-testid={`row-product-${p.id}`} className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${i % 2 === 0 ? '' : 'bg-secondary/10'}`}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
+                        {/* Product thumbnail */}
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt={p.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-border" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
+                            <Package className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        )}
                         <button onClick={() => toggleFavorite(p.id)} data-testid={`button-favorite-${p.id}`} className="flex-shrink-0 text-muted-foreground hover:text-yellow-400 transition-colors">
                           <Star className={`w-3.5 h-3.5 ${p.isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`} />
                         </button>
@@ -209,6 +270,64 @@ export default function Produk() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+              {/* Image upload section */}
+              <div>
+                <p className="text-sm font-medium mb-2">Foto Produk</p>
+                {imagePreview ? (
+                  <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-border bg-secondary">
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-contain" />
+                    <button
+                      type="button"
+                      onClick={clearImage}
+                      className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full aspect-video rounded-xl border-2 border-dashed border-border bg-secondary/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <ImagePlus className="w-8 h-8" />
+                    <p className="text-xs">Belum ada foto</p>
+                  </div>
+                )}
+                {/* Camera / Gallery buttons */}
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 gap-2 text-sm"
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <Camera className="w-4 h-4" /> Kamera
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 gap-2 text-sm"
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    <ImagePlus className="w-4 h-4" /> Galeri
+                  </Button>
+                </div>
+                {/* Hidden file inputs */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleCameraInput}
+                />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleCameraInput}
+                />
+              </div>
+
               <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nama Produk</FormLabel>
@@ -235,7 +354,7 @@ export default function Produk() {
                       variant="outline"
                       size="icon"
                       onClick={() => setScannerOpen(true)}
-                      title="Scan dengan kamera"
+                      title="Scan barcode dengan kamera"
                       data-testid="button-scan-barcode-camera"
                     >
                       <Camera className="w-4 h-4" />
@@ -291,15 +410,8 @@ export default function Produk() {
                   </FormItem>
                 )} />
               </div>
-              <FormField control={form.control} name="imageUrl" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL Gambar (opsional)</FormLabel>
-                  <FormControl><Input {...field} data-testid="input-product-image" placeholder="https://..." /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
 
-              <DialogFooter className="gap-2">
+              <DialogFooter className="gap-2 flex-wrap">
                 {editingProduct && (
                   <Button
                     type="button"
@@ -319,7 +431,7 @@ export default function Produk() {
         </DialogContent>
       </Dialog>
 
-      {/* Camera Barcode Scanner for form */}
+      {/* Camera Barcode Scanner */}
       <BarcodeScanner
         open={scannerOpen}
         onScan={handleBarcodeScan}
