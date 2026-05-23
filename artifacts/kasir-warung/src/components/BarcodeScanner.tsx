@@ -22,7 +22,10 @@ export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }
   const [errorMsg, setErrorMsg] = useState("");
 
   const cleanup = useCallback(() => {
-    try { readerRef.current?.reset(); } catch (_) {}
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (readerRef.current as any)?.reset?.();
+    } catch (_) {}
     readerRef.current = null;
   }, []);
 
@@ -250,7 +253,6 @@ export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }
               </div>
             )}
           </div>
-        )}
 
         {/* Footer — hide on permission screen (already has buttons) */}
         {phase !== "permission" && (
