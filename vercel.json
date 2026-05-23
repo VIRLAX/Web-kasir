@@ -1,0 +1,6 @@
+     [1mSTDIN[0m
+[38;2;131;148;150m   1[0m [38;2;248;248;242m{[0m
+[38;2;131;148;150m   2[0m [38;2;248;248;242m  "buildCommand": "pnpm --filter kasir-warung build",[0m
+[38;2;131;148;150m   3[0m [38;2;248;248;242m  "outputDirectory": "artifacts/kasir-warung/dist",[0m
+[38;2;131;148;150m   4[0m [38;2;248;248;242m  "framework": "vite"[0m
+[38;2;131;148;150m   5[0m [38;2;248;248;242m}[0m
