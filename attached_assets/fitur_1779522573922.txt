@@ -1,0 +1,130 @@
+1. Scan barcode kamera
+2. Scan barcode QR
+3. Support USB barcode scanner
+4. Manual barcode input
+5. Auto detect barcode
+6. Auto tambah produk ke cart
+7. Auto qty increment
+8. Multi product cart
+9. Tambah qty manual
+10. Kurangi qty manual
+11. Hapus item cart
+12. Subtotal realtime
+13. Total realtime
+14. Diskon per item
+15. Diskon total transaksi
+16. Pajak otomatis
+17. Kalkulasi akurat anti floating error
+18. Hitung kembalian otomatis
+19. Validasi pembayaran
+20. Fast checkout mode
+21. Reset cart otomatis
+22. Printable digital receipt
+23. Receipt preview modal
+24. Receipt thermal style
+25. Riwayat transaksi
+26. Detail transaksi lengkap
+27. Search transaksi realtime
+28. Filter transaksi tanggal
+29. Total transaksi harian
+30. Total transaksi mingguan
+31. Total transaksi bulanan
+32. Statistik pendapatan realtime
+33. Produk terlaris
+34. Grafik penjualan
+35. Grafik stok
+36. Grafik transaksi
+37. KPI dashboard cards
+38. Dashboard realtime
+39. CRUD produk lengkap
+40. Tambah produk
+41. Edit produk
+42. Hapus produk
+43. Search produk realtime
+44. Filter kategori produk
+45. Sorting produk
+46. Barcode produk unik
+47. Kategori produk
+48. Gambar produk
+49. Favorite products
+50. Recent scanned products
+51. Quick add product buttons
+52. Smart product suggestion
+53. Produk cepat akses
+54. Auto focus barcode input
+55. Monitoring stok realtime
+56. Auto reduce stok
+57. Restock barang
+58. Riwayat restock
+59. Alert stok menipis
+60. Alert stok habis
+61. Prevent negative stock
+62. Stock threshold setting
+63. Export TXT report
+64. Export JSON report
+65. Export CSV report
+66. Backup transaksi
+67. Backup produk
+68. Backup stok
+69. Restore backup data
+70. Daily report
+71. Weekly report
+72. Monthly report
+73. Profit estimation
+74. Growth analytics
+75. Comparison analytics
+76. Summary analytics
+77. Grouped report formatting
+78. Human readable TXT report
+79. Firebase Firestore ready
+80. Firebase realtime sync
+81. Firebase offline persistence
+82. Multi device sync
+83. LocalStorage fallback
+84. Offline-first system
+85. PWA installable
+86. Offline cache
+87. Service worker
+88. Android optimized UI
+89. Mobile-first layout
+90. Responsive tablet layout
+91. Dark mode modern POS
+92. Sticky checkout panel
+93. Sticky cart section
+94. Touch friendly buttons
+95. Smooth lightweight animation
+96. Professional POS layout
+97. Clean spacing UI
+98. Non-overlapping layout
+99. Keyboard shortcut support
+100. ENTER quick checkout
+101. ESC reset cart
+102. Debounce search system
+103. Optimized DOM rendering
+104. Lightweight rendering
+105. Memory optimization
+106. Prevent UI freeze
+107. Transaction locking
+108. Prevent double transaction
+109. Safe JSON parser
+110. Global error handler
+111. Async safety handling
+112. Input sanitization
+113. Anti NaN protection
+114. Anti undefined protection
+115. Error fallback system
+116. Lazy rendering optimization
+117. Cached data loading
+118. Realtime dashboard update
+119. Realtime cart update
+120. Realtime stock update
+121. Realtime report update
+122. Cash denomination helper
+123. Auto rounding option
+124. Smart cashier workflow
+125. Fast transaction processing
+126. Enterprise-style mini POS architecture
+127. Modular JavaScript structure
+128. Clean maintainable system
+129. Scalable POS structure
+130. Production-ready cashier workflow

@@ -1,0 +1,200 @@
+Kamu adalah ELITE SENIOR FULLSTACK ENGINEER spesialis POS System, Retail System, dan Offline-First Web App.
+
+TUJUAN:
+Buat aplikasi WEB KASIR WARUNG MODERN CANGGIH, REAL-TIME, AKURAT, DAN SIAP PAKAI TOKO BENARAN.
+
+========================
+OUTPUT WAJIB (STRICT)
+========================
+Buat hanya 2 FILE:
+
+1. index.html
+   - HTML + CSS digabung dalam 1 file
+   - Struktur rapi, modern, clean
+
+2. app.js
+   - Semua JavaScript logic dipisah
+   - Modular, clean, scalable
+   - Tidak boleh inline JS di HTML
+
+WAJIB:
+- Kedua file harus saling terhubung dengan benar
+- Tidak boleh file lain
+- Tidak boleh framework
+- Tidak boleh backend server
+
+========================
+ARSITEKTUR WAJIB
+========================
+- HTML = UI structure + embedded CSS
+- JS = semua logic aplikasi
+- Gunakan ES6+ modular pattern (function-based architecture)
+- Gunakan clean separation:
+  - uiHandler
+  - cartManager
+  - productManager
+  - transactionManager
+  - stockManager
+  - reportManager
+
+========================
+CORE FITUR (FULL POS SYSTEM)
+========================
+
+# KASIR REAL-TIME
+- Scan barcode kamera (html5-qrcode)
+- Input barcode manual
+- USB scanner support (keyboard input)
+- Produk auto masuk cart
+- Qty auto increment jika barcode sama
+- Update total REAL-TIME (tanpa delay)
+- Subtotal per item
+- Total semua item
+- Diskon item + diskon total
+- Pajak optional
+- Payment cash
+- Auto kembalian akurat (no floating error)
+- Validasi uang masuk
+- Reset cart otomatis setelah transaksi
+
+========================
+PRODUK SYSTEM
+========================
+- CRUD produk lengkap
+- Nama, harga, stok, barcode, kategori, gambar URL
+- Search realtime (debounce)
+- Sorting (nama, harga, stok)
+- Produk favorit (quick access)
+- Recent products tracking
+
+========================
+STOK SYSTEM
+========================
+- Auto reduce stok setelah transaksi
+- Restock system
+- Prevent negative stock
+- Alert stok habis & menipis
+- Threshold stok bisa diatur
+- Stock monitoring realtime
+
+========================
+TRANSAKSI SYSTEM
+========================
+- Simpan transaksi (localStorage utama)
+- Firebase optional (ready structure)
+- Detail transaksi lengkap
+- Timestamp otomatis
+- History transaksi searchable
+- Anti duplicate transaction bug
+- Receipt generator (struk digital rapi & printable)
+
+========================
+DASHBOARD
+========================
+- KPI cards:
+  - total transaksi
+  - total pendapatan
+  - total produk
+  - stok kritis
+- Grafik penjualan (Chart.js)
+- Grafik stok
+- Barang terlaris
+- Statistik realtime
+
+========================
+LAPORAN SYSTEM (WAJIB RAPI)
+========================
+- Laporan harian / mingguan / bulanan
+- Export:
+  - TXT (rapi, readable format)
+  - JSON (structured)
+  - CSV (Excel ready)
+- Format TXT HARUS:
+  - jelas
+  - rapi
+  - pakai grouping
+  - ada total summary
+  - mudah dibaca manusia
+
+========================
+SMART FEATURES (WAJIB CANGGIH)
+========================
+- Auto suggestion produk
+- Quick add buttons
+- Favorite products
+- Fast checkout mode (1 klik bayar)
+- Keyboard shortcut:
+  - ENTER = bayar
+  - ESC = reset
+- Cash denomination helper (pecahan uang)
+- Recent scanned products
+- Auto focus barcode input
+
+========================
+REAL-TIME REQUIREMENT
+========================
+- Semua update harus instant:
+  - cart update
+  - total update
+  - stok update
+  - dashboard update
+
+- Tidak boleh delay UI
+- Tidak boleh re-render berat
+- Gunakan state management ringan (JS object store)
+
+========================
+ACCURACY RULES (WAJIB)
+========================
+- Semua perhitungan harus 100% akurat
+- Tidak boleh floating point error (gunakan safe number handling)
+- Tidak boleh NaN / undefined crash
+- Semua input harus divalidasi
+- Semua error harus di-handle (try/catch global)
+
+========================
+UI/UX DESIGN
+========================
+- Dark mode modern POS
+- Mobile-first (Android utama)
+- Touch friendly UI
+- Tombol besar
+- Layout kasir cepat (1 layar semua fungsi)
+- Sticky payment panel bawah
+- Minimalis, clean, profesional
+- Warung/minimarket style (bukan aplikasi ribet)
+
+========================
+PERFORMANCE RULES
+========================
+- Fast DOM update
+- Debounce search input
+- Avoid unnecessary rerender
+- Lightweight rendering
+- No memory leak
+- Efficient event handling
+
+========================
+FIREBASE (OPTIONAL)
+========================
+- Struktur siap Firestore
+- Sync produk & transaksi
+- Offline fallback localStorage utama
+- Tidak boleh crash kalau Firebase tidak aktif
+
+========================
+HASIL AKHIR HARUS:
+========================
+- Bisa dipakai warung beneran
+- Cepat seperti POS profesional
+- Stabil di HP Android low-end
+- Tidak lag saat transaksi banyak
+- Clean architecture meskipun 1 app kecil
+
+========================
+START:
+Langsung buat kedua file:
+1. index.html (HTML + CSS)
+2. app.js (JavaScript logic penuh)
+
+Tidak boleh penjelasan panjang, langsung implementasi penuh.
