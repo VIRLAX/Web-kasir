@@ -1,13 +1,26 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle } from "lucide-react";
+import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Product, CartItem, Transaction, getProducts, setProducts, getTransactions, setTransactions, getSettings } from "@/lib/storage";
 import { calculateTotals, formatRupiah, generateTransactionId } from "@/lib/calculations";
 
 const DENOMINATIONS = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+
+// Parse "k" shorthand: "50k" → 50000, "2.5k" → 2500, "20000" → 20000
+function parseKAmount(val: string): number {
+  const s = val.trim().toLowerCase();
+  if (!s || s === "0") return 0;
+  if (s.endsWith("k")) {
+    const n = parseFloat(s.slice(0, -1));
+    return isNaN(n) ? 0 : Math.round(n * 1000);
+  }
+  const n = parseInt(s.replace(/\D/g, ""), 10);
+  return isNaN(n) ? 0 : n;
+}
 
 function ReceiptModal({ transaction, storeName, onClose }: { transaction: Transaction; storeName: string; onClose: () => void }) {
   const d = new Date(transaction.timestamp);
@@ -87,6 +100,7 @@ export default function Kasir() {
   const [cashInput, setCashInput] = useState("");
   const [receiptTrx, setReceiptTrx] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const cashRef = useRef<HTMLInputElement>(null);
@@ -110,10 +124,7 @@ export default function Kasir() {
 
   const totals = useMemo(() => calculateTotals(cart, settings), [cart, settings]);
 
-  const cashAmount = useMemo(() => {
-    const v = parseInt(cashInput.replace(/\D/g, ""), 10);
-    return isNaN(v) ? 0 : v;
-  }, [cashInput]);
+  const cashAmount = useMemo(() => parseKAmount(cashInput), [cashInput]);
 
   const change = useMemo(() => Math.max(0, cashAmount - totals.total), [cashAmount, totals.total]);
   const canCheckout = cart.length > 0 && cashAmount >= totals.total && totals.total > 0 && !isProcessing;
@@ -172,6 +183,18 @@ export default function Kasir() {
     }
     setBarcodeInput("");
   }, [barcodeInput, products, addToCart, toast]);
+
+  // Called when camera scanner finds a barcode
+  const handleCameraScan = useCallback((barcode: string) => {
+    setScannerOpen(false);
+    const product = products.find(p => p.barcode === barcode);
+    if (!product) {
+      toast({ title: `Barcode tidak ditemukan: ${barcode}`, variant: "destructive" });
+    } else {
+      addToCart(product);
+      toast({ title: `✓ ${product.name} ditambahkan` });
+    }
+  }, [products, addToCart, toast]);
 
   const updateQty = useCallback((productId: string, delta: number) => {
     setCart(prev => {
@@ -259,6 +282,13 @@ export default function Kasir() {
     setTimeout(() => barcodeRef.current?.focus(), 50);
   }, []);
 
+  // Whether cashInput uses "k" and shows a converted hint
+  const cashHint = useMemo(() => {
+    const s = cashInput.trim().toLowerCase();
+    if (s.endsWith("k") && cashAmount > 0) return formatRupiah(cashAmount);
+    return null;
+  }, [cashInput, cashAmount]);
+
   return (
     <div className="flex flex-col md:flex-row h-full overflow-hidden">
       {/* Left panel — product browser */}
@@ -273,11 +303,21 @@ export default function Kasir() {
                 data-testid="input-barcode"
                 value={barcodeInput}
                 onChange={e => setBarcodeInput(e.target.value)}
-                placeholder="Scan / ketik barcode... (F2)"
+                placeholder="Ketik / scan barcode..."
                 className="pl-9 font-mono text-sm bg-background"
                 autoComplete="off"
               />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setScannerOpen(true)}
+              data-testid="button-camera-scan"
+              title="Scan dengan kamera"
+            >
+              <Camera className="w-4 h-4" />
+            </Button>
             <Button type="submit" variant="outline" size="icon" data-testid="button-barcode-submit">
               <Plus className="w-4 h-4" />
             </Button>
@@ -456,19 +496,27 @@ export default function Kasir() {
             </div>
           </div>
 
-          {/* Cash input */}
+          {/* Cash input with "k" support */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Uang Diterima</p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs text-muted-foreground">Uang Diterima</p>
+              <p className="text-xs text-muted-foreground">contoh: <span className="text-primary font-mono">50k</span> = Rp 50.000</p>
+            </div>
             <Input
               ref={cashRef}
-              type="number"
-              min="0"
+              type="text"
+              inputMode="decimal"
               value={cashInput}
               onChange={e => setCashInput(e.target.value)}
-              placeholder="0"
+              placeholder="0 atau 50k"
               data-testid="input-cash"
               className="text-base font-semibold"
+              autoComplete="off"
             />
+            {/* Show converted amount when "k" is used */}
+            {cashHint && (
+              <p className="text-xs text-primary mt-1 font-medium">= {cashHint}</p>
+            )}
             {/* Denomination buttons */}
             <div className="flex flex-wrap gap-1 mt-2">
               {DENOMINATIONS.map(d => (
@@ -508,11 +556,18 @@ export default function Kasir() {
             data-testid="button-checkout"
             className="w-full h-12 text-base font-bold"
           >
-            {isProcessing ? "Memproses..." : "BAYAR (ENTER)"}
+            {isProcessing ? "Memproses..." : "BAYAR"}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">ESC = kosongkan · F2 = fokus barcode</p>
         </div>
       </div>
+
+      {/* Camera Barcode Scanner */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onScan={handleCameraScan}
+        onClose={() => setScannerOpen(false)}
+        title="Scan Barcode Produk"
+      />
 
       {receiptTrx && (
         <ReceiptModal

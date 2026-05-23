@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Plus, Search, Edit2, Trash2, Star, Package } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Star, Package, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Product, getProducts, setProducts } from "@/lib/storage";
 import { formatRupiah, generateBarcode } from "@/lib/calculations";
 
@@ -43,6 +44,7 @@ export default function Produk() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const form = useForm<FormData>({ resolver: zodResolver(schema), defaultValues: { name: "", barcode: "", price: 0, stock: 0, category: "Makanan", stockThreshold: 10, imageUrl: "", isFavorite: false } });
 
@@ -98,6 +100,13 @@ export default function Produk() {
     setProductsState(updated);
   }, [products]);
 
+  // Called when camera scanner returns a barcode in the add/edit form
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    form.setValue("barcode", barcode, { shouldValidate: true });
+    setScannerOpen(false);
+    toast({ title: `Barcode: ${barcode}` });
+  }, [form, toast]);
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -137,7 +146,7 @@ export default function Produk() {
         </Select>
       </div>
 
-      {/* Table */}
+      {/* Product list */}
       {filtered.length === 0 ? (
         <div className="bg-card border border-card-border rounded-xl flex flex-col items-center justify-center py-16 text-center">
           <Package className="w-10 h-10 text-muted-foreground mb-3" />
@@ -179,7 +188,7 @@ export default function Produk() {
                         <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-${p.id}`} className="h-8 w-8">
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.id}`} className="h-8 w-8 text-destructive hover:text-destructive">
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(p.id)} data-testid={`button-delete-${p.id}`} className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -207,20 +216,44 @@ export default function Produk() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <div className="flex gap-2">
-                <FormField control={form.control} name="barcode" render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>Barcode</FormLabel>
-                    <FormControl><Input {...field} data-testid="input-product-barcode" placeholder="8968601000100" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <div className="flex items-end">
-                  <Button type="button" variant="outline" size="sm" onClick={() => form.setValue("barcode", generateBarcode())} data-testid="button-generate-barcode">
-                    Generate
-                  </Button>
-                </div>
-              </div>
+
+              {/* Barcode field with camera scan */}
+              <FormField control={form.control} name="barcode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Barcode</FormLabel>
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input
+                        {...field}
+                        data-testid="input-product-barcode"
+                        placeholder="8968601000100"
+                        className="font-mono flex-1"
+                      />
+                    </FormControl>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setScannerOpen(true)}
+                      title="Scan dengan kamera"
+                      data-testid="button-scan-barcode-camera"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => form.setValue("barcode", generateBarcode())}
+                      data-testid="button-generate-barcode"
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="price" render={({ field }) => (
                   <FormItem>
@@ -265,7 +298,19 @@ export default function Produk() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <DialogFooter>
+
+              <DialogFooter className="gap-2">
+                {editingProduct && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => { setDialogOpen(false); setDeleteId(editingProduct.id); }}
+                    data-testid="button-delete-from-edit"
+                    className="mr-auto"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" /> Hapus
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
                 <Button type="submit" data-testid="button-save-product">{editingProduct ? "Simpan" : "Tambahkan"}</Button>
               </DialogFooter>
@@ -274,12 +319,22 @@ export default function Produk() {
         </DialogContent>
       </Dialog>
 
+      {/* Camera Barcode Scanner for form */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onScan={handleBarcodeScan}
+        onClose={() => setScannerOpen(false)}
+        title="Scan Barcode Produk"
+      />
+
       {/* Delete Confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
-            <AlertDialogDescription>Produk ini akan dihapus permanen. Yakin?</AlertDialogDescription>
+            <AlertDialogDescription>
+              Produk <span className="font-semibold text-foreground">{products.find(p => p.id === deleteId)?.name}</span> akan dihapus permanen. Yakin?
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
