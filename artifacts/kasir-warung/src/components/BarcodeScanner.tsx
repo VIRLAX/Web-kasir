@@ -194,9 +194,11 @@ export function BarcodeScanner({ open, onScan, onClose, title = "Scan Barcode" }
           </div>
         )}
 
-        {/* Camera viewport — only mount when not on permission screen */}
-        {phase !== "permission" && (
-          <div className="relative bg-black w-full" style={{ aspectRatio: "4/3" }}>
+        {/* Camera viewport — always rendered so videoRef is available */}
+        <div
+          className="relative bg-black w-full"
+          style={{ aspectRatio: "4/3", display: phase === "permission" ? "none" : "block" }}
+        >
             <video
               ref={videoRef}
               className="w-full h-full object-cover"
