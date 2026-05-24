@@ -487,13 +487,13 @@ export default function Kasir() {
             <div className="relative">
               <Input
                 type="text"
-                inputMode="decimal"
                 value={cashInput}
                 onChange={e => setCashInput(e.target.value)}
                 placeholder='cth: 50000 atau 50k'
                 data-testid="input-cash"
                 className="text-base font-semibold pr-10"
                 autoComplete="off"
+                autoCorrect="off"
                 spellCheck={false}
               />
               {cashInput && (

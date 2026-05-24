@@ -12,9 +12,11 @@ import Transaksi from "@/pages/Transaksi";
 import Dashboard from "@/pages/Dashboard";
 import Laporan from "@/pages/Laporan";
 import NotFound from "@/pages/not-found";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, logout } from "@/lib/auth";
 
 const queryClient = new QueryClient();
+
+type LogoutReason = "expired" | "logout" | undefined;
 
 function Router({ onLogout }: { onLogout: () => void }) {
   return (
@@ -34,15 +36,29 @@ function Router({ onLogout }: { onLogout: () => void }) {
 
 function App() {
   const [authed, setAuthed] = useState(() => isAuthenticated());
+  const [logoutReason, setLogoutReason] = useState<LogoutReason>(() =>
+    !isAuthenticated() && localStorage.getItem("kasir_auth_session") === null ? undefined : "expired"
+  );
+
+  const handleLogout = () => {
+    logout();
+    setLogoutReason("logout");
+    setAuthed(false);
+  };
+
+  const handleLogin = () => {
+    setLogoutReason(undefined);
+    setAuthed(true);
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           {authed ? (
-            <Router onLogout={() => setAuthed(false)} />
+            <Router onLogout={handleLogout} />
           ) : (
-            <Login onLogin={() => setAuthed(true)} />
+            <Login onLogin={handleLogin} reason={logoutReason} />
           )}
         </WouterRouter>
         <Toaster richColors position="top-right" />
