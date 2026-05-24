@@ -19,26 +19,24 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: artifacts/kasir-warung
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install
-        run: pnpm install --no-frozen-lockfile
+        run: npm install --legacy-peer-deps
 
       - name: Build
-        working-directory: artifacts/kasir-warung
         env:
           BASE_PATH: /Web-kasir/
           NODE_ENV: production
-        run: pnpm run build
+        run: npm run build
 
       - uses: actions/configure-pages@v4
 
