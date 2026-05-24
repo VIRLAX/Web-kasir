@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle, Camera } from "lucide-react";
+import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle, Camera, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,18 +9,6 @@ import { Product, CartItem, Transaction, getProducts, setProducts, getTransactio
 import { calculateTotals, formatRupiah, generateTransactionId } from "@/lib/calculations";
 
 const DENOMINATIONS = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
-
-// Parse "k" shorthand: "50k" → 50000, "2.5k" → 2500, "20000" → 20000
-function parseKAmount(val: string): number {
-  const s = val.trim().toLowerCase();
-  if (!s || s === "0") return 0;
-  if (s.endsWith("k")) {
-    const n = parseFloat(s.slice(0, -1));
-    return isNaN(n) ? 0 : Math.round(n * 1000);
-  }
-  const n = parseInt(s.replace(/\D/g, ""), 10);
-  return isNaN(n) ? 0 : n;
-}
 
 function ReceiptModal({ transaction, storeName, onClose }: { transaction: Transaction; storeName: string; onClose: () => void }) {
   const d = new Date(transaction.timestamp);
@@ -97,13 +85,12 @@ export default function Kasir() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("semua");
-  const [cashInput, setCashInput] = useState("");
+  const [cashAmount, setCashAmount] = useState(0);
   const [receiptTrx, setReceiptTrx] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
-  const cashRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(() => {
     const cats = [...new Set(products.map(p => p.category))];
@@ -121,27 +108,16 @@ export default function Kasir() {
   }, [products, categoryFilter, search]);
 
   const favorites = useMemo(() => products.filter(p => p.isFavorite), [products]);
-
   const totals = useMemo(() => calculateTotals(cart, settings), [cart, settings]);
-
-  const cashAmount = useMemo(() => parseKAmount(cashInput), [cashInput]);
-
   const change = useMemo(() => Math.max(0, cashAmount - totals.total), [cashAmount, totals.total]);
   const canCheckout = cart.length > 0 && cashAmount >= totals.total && totals.total > 0 && !isProcessing;
 
-  // Auto focus barcode on mount
-  useEffect(() => {
-    barcodeRef.current?.focus();
-  }, []);
+  useEffect(() => { barcodeRef.current?.focus(); }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "TEXTAREA") {
-        if (e.key === "Escape") {
-          (e.target as HTMLInputElement).blur?.();
-          handleClearCart();
-        }
+        if (e.key === "Escape") { (e.target as HTMLInputElement).blur?.(); handleClearCart(); }
         return;
       }
       if (e.key === "Enter" && canCheckout) handleCheckout();
@@ -160,8 +136,7 @@ export default function Kasir() {
     setCart(prev => {
       const existing = prev.find(i => i.productId === product.id);
       if (existing) {
-        const currentQty = existing.qty;
-        if (currentQty >= product.stock) {
+        if (existing.qty >= product.stock) {
           toast({ title: `Stok tidak cukup (maks: ${product.stock})`, variant: "destructive" });
           return prev;
         }
@@ -184,7 +159,6 @@ export default function Kasir() {
     setBarcodeInput("");
   }, [barcodeInput, products, addToCart, toast]);
 
-  // Called when camera scanner finds a barcode
   const handleCameraScan = useCallback((barcode: string) => {
     setScannerOpen(false);
     const product = products.find(p => p.barcode === barcode);
@@ -222,7 +196,7 @@ export default function Kasir() {
 
   const handleClearCart = useCallback(() => {
     setCart([]);
-    setCashInput("");
+    setCashAmount(0);
     setBarcodeInput("");
     setTimeout(() => barcodeRef.current?.focus(), 50);
   }, []);
@@ -230,7 +204,6 @@ export default function Kasir() {
   const handleCheckout = useCallback(() => {
     if (!canCheckout) return;
     setIsProcessing(true);
-
     try {
       const transactions = getTransactions();
       const todayTrxCount = transactions.filter(t => {
@@ -241,21 +214,14 @@ export default function Kasir() {
 
       const id = generateTransactionId(todayTrxCount);
       const now = new Date().toISOString();
-
       const newTrx: Transaction = {
-        id,
-        items: cart,
-        subtotal: totals.subtotal,
-        discountTotal: totals.discountTotal,
-        tax: totals.tax,
-        taxRate: settings.taxRate,
-        total: totals.total,
-        paid: cashAmount,
-        change,
+        id, items: cart,
+        subtotal: totals.subtotal, discountTotal: totals.discountTotal,
+        tax: totals.tax, taxRate: settings.taxRate,
+        total: totals.total, paid: cashAmount, change,
         timestamp: now,
       };
 
-      // Reduce stock
       const updatedProducts = products.map(p => {
         const cartItem = cart.find(c => c.productId === p.id);
         if (!cartItem) return p;
@@ -265,12 +231,11 @@ export default function Kasir() {
       setTransactions([...transactions, newTrx]);
       setProducts(updatedProducts);
       setProductsState(updatedProducts);
-
       setReceiptTrx(newTrx);
       setCart([]);
-      setCashInput("");
+      setCashAmount(0);
       setBarcodeInput("");
-    } catch (err) {
+    } catch {
       toast({ title: "Terjadi kesalahan saat checkout", variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -282,17 +247,11 @@ export default function Kasir() {
     setTimeout(() => barcodeRef.current?.focus(), 50);
   }, []);
 
-  // Whether cashInput uses "k" and shows a converted hint
-  const cashHint = useMemo(() => {
-    const s = cashInput.trim().toLowerCase();
-    if (s.endsWith("k") && cashAmount > 0) return formatRupiah(cashAmount);
-    return null;
-  }, [cashInput, cashAmount]);
-
   return (
     <div className="flex flex-col md:flex-row h-full overflow-hidden">
-      {/* Left panel — product browser */}
+      {/* ── Left panel: product browser ── */}
       <div className="flex-1 flex flex-col overflow-hidden border-b md:border-b-0 md:border-r border-border min-h-0">
+
         {/* Barcode input */}
         <div className="p-3 border-b border-border bg-card/50 flex-shrink-0">
           <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
@@ -308,14 +267,7 @@ export default function Kasir() {
                 autoComplete="off"
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => setScannerOpen(true)}
-              data-testid="button-camera-scan"
-              title="Scan dengan kamera"
-            >
+            <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} data-testid="button-camera-scan" title="Scan dengan kamera">
               <Camera className="w-4 h-4" />
             </Button>
             <Button type="submit" variant="outline" size="icon" data-testid="button-barcode-submit">
@@ -328,13 +280,7 @@ export default function Kasir() {
         <div className="px-3 pt-3 pb-2 flex-shrink-0 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              data-testid="input-search-kasir"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Cari produk..."
-              className="pl-9 text-sm"
-            />
+            <Input data-testid="input-search-kasir" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari produk..." className="pl-9 text-sm" />
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {categories.map(cat => (
@@ -362,7 +308,8 @@ export default function Kasir() {
                   key={p.id}
                   onClick={() => addToCart(p)}
                   data-testid={`btn-favorite-${p.id}`}
-                  className="flex-shrink-0 bg-primary/10 border border-primary/20 hover:bg-primary/20 rounded-lg px-3 py-2 text-left transition-colors"
+                  disabled={p.stock === 0}
+                  className="flex-shrink-0 bg-primary/10 border border-primary/20 hover:bg-primary/20 disabled:opacity-40 rounded-lg px-3 py-2 text-left transition-colors"
                 >
                   <p className="text-xs font-medium text-primary whitespace-nowrap">{p.name}</p>
                   <p className="text-xs text-muted-foreground">{formatRupiah(p.price)}</p>
@@ -380,36 +327,62 @@ export default function Kasir() {
               <p className="text-sm">Produk tidak ditemukan</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-              {filteredProducts.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => addToCart(p)}
-                  data-testid={`btn-product-${p.id}`}
-                  disabled={p.stock === 0}
-                  className={`bg-card border rounded-xl p-3 text-left transition-all hover:border-primary/40 hover:bg-card/80 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${p.stock <= p.stockThreshold && p.stock > 0 ? "border-yellow-500/40" : "border-card-border"}`}
-                >
-                  <p className="font-medium text-sm text-foreground leading-tight line-clamp-2">{p.name}</p>
-                  <p className="text-xs text-primary font-semibold mt-1">{formatRupiah(p.price)}</p>
-                  <p className={`text-xs mt-0.5 ${p.stock === 0 ? "text-destructive" : p.stock <= p.stockThreshold ? "text-yellow-400" : "text-muted-foreground"}`}>
-                    Stok: {p.stock}
-                  </p>
-                </button>
-              ))}
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+              {filteredProducts.map(p => {
+                const inCart = cart.find(i => i.productId === p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => addToCart(p)}
+                    data-testid={`btn-product-${p.id}`}
+                    disabled={p.stock === 0}
+                    className={`relative bg-card border rounded-xl p-3 text-left transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed ${
+                      inCart
+                        ? "border-primary/60 bg-primary/5 shadow-sm shadow-primary/10"
+                        : p.stock <= p.stockThreshold && p.stock > 0
+                          ? "border-yellow-500/40 hover:border-yellow-400/60"
+                          : "border-card-border hover:border-primary/30 hover:bg-card/80"
+                    }`}
+                  >
+                    {/* Product image */}
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt={p.name} className="w-full aspect-square object-cover rounded-lg mb-2 border border-border" />
+                    ) : (
+                      <div className="w-full aspect-square rounded-lg mb-2 bg-secondary/50 flex items-center justify-center border border-border">
+                        <Package className="w-6 h-6 text-muted-foreground/40" />
+                      </div>
+                    )}
+                    <p className="font-medium text-sm text-foreground leading-tight line-clamp-2">{p.name}</p>
+                    <p className="text-xs text-primary font-semibold mt-1">{formatRupiah(p.price)}</p>
+                    <p className={`text-xs mt-0.5 ${p.stock === 0 ? "text-destructive" : p.stock <= p.stockThreshold ? "text-yellow-400" : "text-muted-foreground"}`}>
+                      Stok: {p.stock}
+                    </p>
+                    {/* In-cart badge */}
+                    {inCart && (
+                      <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {inCart.qty}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {/* Right panel — cart */}
-      <div className="w-full md:w-80 lg:w-96 flex flex-col flex-shrink-0 bg-card/30 max-h-[50vh] md:max-h-full overflow-hidden">
+      {/* ── Right panel: cart ── */}
+      <div className="w-full md:w-80 lg:w-96 flex flex-col flex-shrink-0 bg-card/30 max-h-[55vh] md:max-h-full overflow-hidden">
+
         {/* Cart header */}
         <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-4 h-4 text-primary" />
             <span className="font-semibold text-sm">Keranjang</span>
             {cart.length > 0 && (
-              <span className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+              <span className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                {cart.reduce((s, i) => s + i.qty, 0)}
+              </span>
             )}
           </div>
           {cart.length > 0 && (
@@ -432,30 +405,34 @@ export default function Kasir() {
               {cart.map(item => {
                 const lineTotal = item.price * item.qty - item.discount;
                 return (
-                  <div key={item.productId} data-testid={`cart-item-${item.productId}`} className="bg-card border border-card-border rounded-lg p-3">
+                  <div key={item.productId} data-testid={`cart-item-${item.productId}`} className="bg-card border border-card-border rounded-xl p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground leading-tight flex-1 min-w-0">{item.name}</p>
-                      <button onClick={() => removeFromCart(item.productId)} data-testid={`btn-remove-${item.productId}`} className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 mt-0.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground leading-tight">{item.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatRupiah(item.price)} / item</p>
+                      </div>
+                      <button onClick={() => removeFromCart(item.productId)} data-testid={`btn-remove-${item.productId}`} className="text-muted-foreground/50 hover:text-destructive transition-colors flex-shrink-0 p-0.5">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatRupiah(item.price)}/item</p>
-                    <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center justify-between mt-2.5">
                       <div className="flex items-center gap-1">
-                        <button onClick={() => updateQty(item.productId, -1)} data-testid={`btn-minus-${item.productId}`} className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center hover:bg-secondary/80 transition-colors">
+                        <button onClick={() => updateQty(item.productId, -1)} data-testid={`btn-minus-${item.productId}`} className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center hover:bg-secondary/70 active:scale-95 transition-all">
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="w-8 text-center text-sm font-semibold" data-testid={`qty-${item.productId}`}>{item.qty}</span>
-                        <button onClick={() => updateQty(item.productId, 1)} data-testid={`btn-plus-${item.productId}`} className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center hover:bg-secondary/80 transition-colors">
+                        <span className="w-8 text-center text-sm font-bold" data-testid={`qty-${item.productId}`}>{item.qty}</span>
+                        <button onClick={() => updateQty(item.productId, 1)} data-testid={`btn-plus-${item.productId}`} className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center hover:bg-secondary/70 active:scale-95 transition-all">
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
-                      <span className="text-sm font-semibold text-foreground">{formatRupiah(lineTotal)}</span>
+                      <span className="text-sm font-bold text-foreground">{formatRupiah(lineTotal)}</span>
                     </div>
+                    {/* Discount input */}
                     <div className="mt-2">
                       <Input
                         type="number"
                         min="0"
+                        inputMode="numeric"
                         value={item.discount || ""}
                         onChange={e => updateDiscount(item.productId, e.target.value)}
                         placeholder="Diskon item (Rp)"
@@ -470,13 +447,13 @@ export default function Kasir() {
           )}
         </div>
 
-        {/* Payment panel */}
+        {/* ── Payment panel ── */}
         <div className="flex-shrink-0 border-t border-border bg-card p-4 space-y-3">
           {/* Totals */}
-          <div className="space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{formatRupiah(totals.subtotal)}</span>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="text-foreground">{formatRupiah(totals.subtotal)}</span>
             </div>
             {totals.discountTotal > 0 && (
               <div className="flex justify-between">
@@ -487,94 +464,89 @@ export default function Kasir() {
             {settings.taxEnabled && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pajak ({Math.round(settings.taxRate * 100)}%)</span>
-                <span>{formatRupiah(totals.tax)}</span>
+                <span className="text-foreground">{formatRupiah(totals.tax)}</span>
               </div>
             )}
-            <div className="flex justify-between text-base font-bold border-t border-border pt-1.5">
+            <div className="flex justify-between text-base font-bold pt-1 border-t border-border mt-1">
               <span>TOTAL</span>
               <span className="text-primary" data-testid="text-total">{formatRupiah(totals.total)}</span>
             </div>
           </div>
 
-          {/* Cash input with "k" support */}
+          {/* Uang Diterima — plain number input, no "k" */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs text-muted-foreground">Uang Diterima</p>
-              <p className="text-xs text-muted-foreground">contoh: <span className="text-primary font-mono">50k</span> = Rp 50.000</p>
-            </div>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">Uang Diterima</p>
             <Input
-              ref={cashRef}
-              type="text"
-              inputMode="decimal"
-              value={cashInput}
-              onChange={e => setCashInput(e.target.value)}
-              placeholder="0 atau 50k"
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={cashAmount || ""}
+              onChange={e => setCashAmount(Math.max(0, parseInt(e.target.value) || 0))}
+              placeholder="0"
               data-testid="input-cash"
               className="text-base font-semibold"
               autoComplete="off"
             />
-            {/* Show converted amount when "k" is used */}
-            {cashHint && (
-              <p className="text-xs text-primary mt-1 font-medium">= {cashHint}</p>
-            )}
-            {/* Denomination buttons */}
+            {/* Quick amount buttons */}
             <div className="flex flex-wrap gap-1 mt-2">
               {DENOMINATIONS.map(d => (
                 <button
                   key={d}
-                  onClick={() => setCashInput(String(cashAmount + d))}
+                  onClick={() => setCashAmount(prev => prev + d)}
                   data-testid={`btn-denom-${d}`}
-                  className="text-xs px-2 py-1 bg-secondary hover:bg-secondary/70 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-xs px-2.5 py-1 bg-secondary hover:bg-secondary/70 active:scale-95 rounded-md text-muted-foreground hover:text-foreground transition-all"
                 >
                   +{d >= 1000 ? `${d / 1000}k` : d}
                 </button>
               ))}
               {totals.total > 0 && (
                 <button
-                  onClick={() => setCashInput(String(totals.total))}
+                  onClick={() => setCashAmount(totals.total)}
                   data-testid="btn-exact"
-                  className="text-xs px-2 py-1 bg-primary/20 hover:bg-primary/30 rounded-md text-primary transition-colors"
+                  className="text-xs px-2.5 py-1 bg-primary/15 hover:bg-primary/25 active:scale-95 rounded-md text-primary font-medium transition-all"
                 >
                   Pas
+                </button>
+              )}
+              {cashAmount > 0 && (
+                <button
+                  onClick={() => setCashAmount(0)}
+                  className="text-xs px-2.5 py-1 bg-destructive/10 hover:bg-destructive/20 active:scale-95 rounded-md text-destructive transition-all"
+                >
+                  Reset
                 </button>
               )}
             </div>
           </div>
 
-          {/* Change */}
+          {/* Change indicator */}
           {cashAmount > 0 && totals.total > 0 && (
-            <div className={`flex justify-between text-sm font-semibold rounded-lg p-2 ${cashAmount >= totals.total ? "bg-green-500/10 text-green-400" : "bg-destructive/10 text-destructive"}`}>
+            <div className={`flex justify-between items-center text-sm font-semibold rounded-xl px-3 py-2.5 ${
+              cashAmount >= totals.total
+                ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                : "bg-destructive/10 text-destructive border border-destructive/20"
+            }`}>
               <span>{cashAmount >= totals.total ? "Kembalian" : "Kurang"}</span>
-              <span data-testid="text-change">{formatRupiah(Math.abs(cashAmount - totals.total))}</span>
+              <span data-testid="text-change" className="font-bold">{formatRupiah(Math.abs(cashAmount - totals.total))}</span>
             </div>
           )}
 
-          {/* Checkout button */}
+          {/* Checkout */}
           <Button
             onClick={handleCheckout}
             disabled={!canCheckout}
             data-testid="button-checkout"
-            className="w-full h-12 text-base font-bold"
+            className="w-full h-12 text-base font-bold rounded-xl"
           >
             {isProcessing ? "Memproses..." : "BAYAR"}
           </Button>
         </div>
       </div>
 
-      {/* Camera Barcode Scanner */}
-      <BarcodeScanner
-        open={scannerOpen}
-        onScan={handleCameraScan}
-        onClose={() => setScannerOpen(false)}
-        title="Scan Barcode Produk"
-      />
+      <BarcodeScanner open={scannerOpen} onScan={handleCameraScan} onClose={() => setScannerOpen(false)} title="Scan Barcode Produk" />
 
       {receiptTrx && (
-        <ReceiptModal
-          transaction={receiptTrx}
-          storeName={settings.storeName}
-          onClose={handleReceiptClose}
-        />
+        <ReceiptModal transaction={receiptTrx} storeName={settings.storeName} onClose={handleReceiptClose} />
       )}
     </div>
   );
