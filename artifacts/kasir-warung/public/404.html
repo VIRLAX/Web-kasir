@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script>
+    // GitHub Pages SPA fix
+    // Simpan path ke sessionStorage lalu redirect ke index.html
+    var path = window.location.pathname;
+    var base = '/Web-kasir';
+    var route = path.replace(base, '') || '/';
+    sessionStorage.setItem('spa-redirect', route + window.location.search);
+    window.location.replace(base + '/');
+  </script>
+</head>
+<body></body>
+</html>
