@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Package, BarChart3, ClipboardList, FileText, Layers } from "lucide-react";
+import { ShoppingCart, Package, BarChart3, ClipboardList, FileText, Layers, LogOut } from "lucide-react";
+import { logout } from "@/lib/auth";
 
 const navItems = [
   { href: "/", label: "Kasir", icon: ShoppingCart },
@@ -10,8 +11,18 @@ const navItems = [
   { href: "/laporan", label: "Laporan", icon: FileText },
 ];
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+interface LayoutProps {
+  children: React.ReactNode;
+  onLogout: () => void;
+}
+
+export default function Layout({ children, onLogout }: LayoutProps) {
   const [location] = useLocation();
+
+  const handleLogout = () => {
+    logout();
+    onLogout();
+  };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -45,8 +56,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-4 py-3 border-t border-sidebar-border">
-          <p className="text-xs text-muted-foreground">v1.0.0</p>
+        <div className="px-2 py-3 border-t border-sidebar-border space-y-1">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            Keluar
+          </button>
+          <p className="text-xs text-muted-foreground/50 px-3">v1.0.0</p>
         </div>
       </aside>
 

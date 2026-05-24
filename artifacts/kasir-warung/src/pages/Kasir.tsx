@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle, Camera, Package } from "lucide-react";
+import { Plus, Minus, Trash2, ShoppingCart, Scan, Star, Search, X, CheckCircle, Camera, Package, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -85,7 +85,7 @@ export default function Kasir() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("semua");
-  const [cashAmount, setCashAmount] = useState(0);
+  const [cashInput, setCashInput] = useState("");
   const [receiptTrx, setReceiptTrx] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -109,6 +109,14 @@ export default function Kasir() {
 
   const favorites = useMemo(() => products.filter(p => p.isFavorite), [products]);
   const totals = useMemo(() => calculateTotals(cart, settings), [cart, settings]);
+  const cashAmount = useMemo(() => {
+    const s = cashInput.trim().toLowerCase();
+    if (!s) return 0;
+    const kMatch = s.match(/^(\d+(?:[.,]\d+)?)\s*k$/);
+    if (kMatch) return Math.round(parseFloat(kMatch[1].replace(",", ".")) * 1000);
+    const plain = parseFloat(s.replace(/[^0-9.,]/g, "").replace(",", "."));
+    return isNaN(plain) ? 0 : Math.round(plain);
+  }, [cashInput]);
   const change = useMemo(() => Math.max(0, cashAmount - totals.total), [cashAmount, totals.total]);
   const canCheckout = cart.length > 0 && cashAmount >= totals.total && totals.total > 0 && !isProcessing;
 
@@ -196,7 +204,7 @@ export default function Kasir() {
 
   const handleClearCart = useCallback(() => {
     setCart([]);
-    setCashAmount(0);
+    setCashInput("");
     setBarcodeInput("");
     setTimeout(() => barcodeRef.current?.focus(), 50);
   }, []);
@@ -233,7 +241,7 @@ export default function Kasir() {
       setProductsState(updatedProducts);
       setReceiptTrx(newTrx);
       setCart([]);
-      setCashAmount(0);
+      setCashInput("");
       setBarcodeInput("");
     } catch {
       toast({ title: "Terjadi kesalahan saat checkout", variant: "destructive" });
@@ -473,26 +481,44 @@ export default function Kasir() {
             </div>
           </div>
 
-          {/* Uang Diterima — plain number input, no "k" */}
+          {/* Uang Diterima — text input, supports "2k" = 2000, "50k" = 50000 */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">Uang Diterima</p>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              value={cashAmount || ""}
-              onChange={e => setCashAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              placeholder="0"
-              data-testid="input-cash"
-              className="text-base font-semibold"
-              autoComplete="off"
-            />
+            <div className="relative">
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={cashInput}
+                onChange={e => setCashInput(e.target.value)}
+                placeholder='cth: 50000 atau 50k'
+                data-testid="input-cash"
+                className="text-base font-semibold pr-10"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {cashInput && (
+                <button
+                  type="button"
+                  onClick={() => setCashInput("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {/* Live conversion display */}
+            {cashInput && cashAmount > 0 && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+                <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                <span className="font-semibold text-foreground">{formatRupiah(cashAmount)}</span>
+              </div>
+            )}
             {/* Quick amount buttons */}
             <div className="flex flex-wrap gap-1 mt-2">
               {DENOMINATIONS.map(d => (
                 <button
                   key={d}
-                  onClick={() => setCashAmount(prev => prev + d)}
+                  onClick={() => setCashInput(String(cashAmount + d))}
                   data-testid={`btn-denom-${d}`}
                   className="text-xs px-2.5 py-1 bg-secondary hover:bg-secondary/70 active:scale-95 rounded-md text-muted-foreground hover:text-foreground transition-all"
                 >
@@ -501,16 +527,16 @@ export default function Kasir() {
               ))}
               {totals.total > 0 && (
                 <button
-                  onClick={() => setCashAmount(totals.total)}
+                  onClick={() => setCashInput(String(totals.total))}
                   data-testid="btn-exact"
                   className="text-xs px-2.5 py-1 bg-primary/15 hover:bg-primary/25 active:scale-95 rounded-md text-primary font-medium transition-all"
                 >
                   Pas
                 </button>
               )}
-              {cashAmount > 0 && (
+              {cashInput && (
                 <button
-                  onClick={() => setCashAmount(0)}
+                  onClick={() => setCashInput("")}
                   className="text-xs px-2.5 py-1 bg-destructive/10 hover:bg-destructive/20 active:scale-95 rounded-md text-destructive transition-all"
                 >
                   Reset
