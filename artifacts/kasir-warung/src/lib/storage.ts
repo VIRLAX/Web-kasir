@@ -94,6 +94,16 @@ export const setTransactions = (transactions: Transaction[]) => {
   localStorage.setItem('kasir_transactions', JSON.stringify(transactions));
 };
 
+export const deleteTransaction = (id: string): Transaction[] => {
+  const updated = getTransactions().filter(t => t.id !== id);
+  setTransactions(updated);
+  return updated;
+};
+
+export const clearAllTransactions = (): void => {
+  setTransactions([]);
+};
+
 export const getRestockLogs = (): RestockLog[] => {
   try {
     const data = localStorage.getItem('kasir_restock_logs');

@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback } from "react";
-import { Search, ClipboardList, Printer, Eye } from "lucide-react";
+import { Search, ClipboardList, Printer, Eye, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Transaction, getTransactions, getSettings } from "@/lib/storage";
+import { Transaction, getTransactions, getSettings, deleteTransaction, clearAllTransactions } from "@/lib/storage";
 import { formatRupiah, formatDate, isSameDay } from "@/lib/calculations";
 
 function ReceiptModal({ transaction, storeName, onClose }: { transaction: Transaction; storeName: string; onClose: () => void }) {
@@ -78,14 +78,37 @@ function ReceiptModal({ transaction, storeName, onClose }: { transaction: Transa
   );
 }
 
+function ConfirmDialog({ title, message, onConfirm, onCancel }: {
+  title: string; message: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={onCancel}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" /> {title}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <div className="flex gap-2 mt-2">
+          <Button variant="outline" className="flex-1" onClick={onCancel}>Batal</Button>
+          <Button variant="destructive" className="flex-1" onClick={onConfirm}>Hapus</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Transaksi() {
   const settings = useMemo(() => getSettings(), []);
-  const [transactions] = useState<Transaction[]>(() =>
+  const [transactions, setTransactions] = useState<Transaction[]>(() =>
     [...getTransactions()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   );
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   const today = new Date();
   const todayRevenue = useMemo(() => transactions.filter(t => isSameDay(t.timestamp, today)).reduce((s, t) => s + t.total, 0), [transactions]);
@@ -106,11 +129,38 @@ export default function Transaksi() {
 
   const clearFilters = useCallback(() => { setSearch(""); setDateFilter(""); }, []);
 
+  const handleDeleteOne = useCallback((id: string) => {
+    const updated = deleteTransaction(id);
+    setTransactions([...updated].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    setConfirmDelete(null);
+    if (selectedTrx?.id === id) setSelectedTrx(null);
+  }, [selectedTrx]);
+
+  const handleClearAll = useCallback(() => {
+    clearAllTransactions();
+    setTransactions([]);
+    setConfirmClearAll(false);
+    setSelectedTrx(null);
+  }, []);
+
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Transaksi</h1>
-        <p className="text-sm text-muted-foreground">{transactions.length} total transaksi</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Transaksi</h1>
+          <p className="text-sm text-muted-foreground">{transactions.length} total transaksi</p>
+        </div>
+        {transactions.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 shrink-0"
+            onClick={() => setConfirmClearAll(true)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Hapus Semua
+          </Button>
+        )}
       </div>
 
       {/* Today summary */}
@@ -167,9 +217,19 @@ export default function Transaksi() {
                     <td className="px-4 py-3 text-right text-muted-foreground">{t.items.length} item</td>
                     <td className="px-4 py-3 text-right font-semibold text-primary">{formatRupiah(t.total)}</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedTrx(t)} data-testid={`button-view-${t.id}`} className="h-8 w-8">
-                        <Eye className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setSelectedTrx(t)} data-testid={`button-view-${t.id}`} className="h-8 w-8">
+                          <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setConfirmDelete(t.id)}
+                          className="h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -181,6 +241,24 @@ export default function Transaksi() {
 
       {selectedTrx && (
         <ReceiptModal transaction={selectedTrx} storeName={settings.storeName} onClose={() => setSelectedTrx(null)} />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Hapus Transaksi"
+          message={`Hapus transaksi ${confirmDelete}? Data ini tidak dapat dikembalikan.`}
+          onConfirm={() => handleDeleteOne(confirmDelete)}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {confirmClearAll && (
+        <ConfirmDialog
+          title="Hapus Semua Transaksi"
+          message="Semua riwayat transaksi akan dihapus permanen. Pastikan sudah melakukan ekspor data terlebih dahulu."
+          onConfirm={handleClearAll}
+          onCancel={() => setConfirmClearAll(false)}
+        />
       )}
     </div>
   );
